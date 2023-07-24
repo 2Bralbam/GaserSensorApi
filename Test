@@ -1,0 +1,114 @@
+using GaserSensorApi__Demo_.Models;
+using Microsoft.EntityFrameworkCore;
+
+namespace GaserSensorApi__Demo_.Repositorios
+{
+    public class DataRepository
+    {
+        List<Gasdeviceconsumo> devicesWithName = new List<Gasdeviceconsumo>();
+        GasersensorContext _context = new GasersensorContext();
+        public IEnumerable<Gasdeviceconsumo> GetDatos()
+        {
+            return _context.Gasdeviceconsumo.OrderBy(x => x.Id);
+        }
+        public void SaveData(string valor, string macaddress)
+        {
+            Gasdeviceconsumo gd = new()
+            {
+                MacAddress = macaddress,
+                NivelInicial = int.Parse(valor),
+                FechaHoraInicial = DateTime.Now,
+                NivelFinal = int.Parse(valor),
+                FechaHoraFinal = DateTime.Now,
+                TipoMovimiento = "Comienzo"
+            };
+            _context.Gasdeviceconsumo.Add(gd);
+            _context.SaveChanges();
+        }
+
+        public bool CheckMac(string macaddress)
+        {
+            Gasdeviceconsumo device = _context.Gasdeviceconsumo.FirstOrDefault(x => x.MacAddress == macaddress);
+            if (device == null)
+            {
+                return false;
+            }
+            else
+            {
+                return true;
+            }
+        }
+        public IEnumerable<Gasdeviceconsumo> GetDevicesByName(string macaddress) 
+        {
+            devicesWithName = new List<Gasdeviceconsumo>();
+            foreach (var item in GetDevicesByName(macaddress)) 
+            {
+                devicesWithName.Add(item);
+            }
+            //var lastIndex = devicesWithName.LastOrDefault();
+            //return _context.Gasdeviceconsumo.OrderBy(x=>x.Id).Where(x=>x.MacAddress == macaddress);
+            return devicesWithName;
+        }
+
+        public void UpdateData(string valor, string macaddress)
+        {
+            int Nivel = int.Parse(valor);
+            var lastIndex=GetDevicesByName(macaddress).LastOrDefault();
+            Gasdeviceconsumo device = _context.Gasdeviceconsumo.OrderBy(x => x.Id).LastOrDefault();    //Se obtiene el ultimo registro de la base de datos de ese dispositivo
+
+            if (Nivel > device.NivelFinal && device.FechaHoraFinal.Date == DateTime.Now.Date)  //Momento de carga
+            {
+                if (device.TipoMovimiento == "Carga")                                       //Si el ultimo movimiento fue carga se hace update
+                {
+                    device.NivelFinal = Nivel;
+                    device.FechaHoraFinal = DateTime.Now;
+                    _context.Update(device);
+                    _context.SaveChanges();
+                }
+                else
+                {
+
+                    device.Id = 0;                                                 //Si el ultimo movimiento fue descarga se hace insert con nuevos datos 
+                    device.NivelInicial = device.NivelFinal;
+                    device.NivelFinal = Nivel;
+                    device.FechaHoraInicial = device.FechaHoraFinal;
+                    device.FechaHoraFinal = DateTime.Now;
+                    device.TipoMovimiento = "Carga";
+                    _context.Add(device);
+                    _context.SaveChanges();
+                }
+            }
+            else if (DateTime.Now.Date != device.FechaHoraFinal.Date)        //Si el valor recibido tiene fecha distinta del ultimo registrado se hace insert
+            {
+                device.Id = 0;
+                device.FechaHoraInicial = device.FechaHoraFinal;
+                device.FechaHoraFinal = DateTime.Now;
+                device.NivelInicial = device.NivelFinal;
+                device.NivelFinal = Nivel;
+                device.TipoMovimiento = "Descarga";
+                _context.Add(device);
+                _context.SaveChanges();
+            }
+            else if (Nivel < device.NivelFinal && device.FechaHoraFinal.Date == DateTime.Now.Date)  //Si el valor recibido es menor al ultimo registrado es descarga
+            {
+                if (device.TipoMovimiento == "Descarga")
+                {
+                    device.NivelFinal = Nivel;
+                    device.FechaHoraFinal = DateTime.Now;
+                    _context.Update(device);
+                    _context.SaveChanges();
+                }
+                else                                                                  //Si el ultimo registro es "Carga" y el Nivel bajó, se inserta uno nuevo con descarga
+                {
+                    device.Id = 0;
+                    device.NivelInicial = device.NivelFinal;
+                    device.TipoMovimiento = "Descarga";
+                    device.NivelFinal = Nivel;
+                    device.FechaHoraFinal = DateTime.Now;
+                    _context.Add(device);
+                    _context.SaveChanges();
+                }
+            }
+        }
+    }
+}
